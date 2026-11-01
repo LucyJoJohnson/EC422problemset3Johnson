@@ -118,7 +118,7 @@ can_gas |>
     y = "Log of Natural Gas Production"
   ) +
   theme_minimal()
-# The plot is still trending upward, but at an overall descreasing rate instead of increasing rate. The size of the seasonal swings in the middle do not change thatmuch, leading me to believe that a log transformation is not the right transformation for the data. This is because the data does not become linear with the log transoformation, it instead just changes shape.
+# The plot is still trending upward, but at an overall decreasing rate instead of increasing rate. The size of the seasonal swings in the middle do not change thatmuch, leading me to believe that a log transformation is not the right transformation for the data. This is because the data does not become linear with the log transoformation, it instead just changes shape.
 
 retail_nsa <- retail_ts |>
   filter(series_id == "RSAFSNA")
@@ -188,7 +188,6 @@ retail_ts |>
   theme_minimal()
 # The non-seasonally adjusted data has a lot more extreme spikes and dips than the seasonally adjusted data, just like the graph in 2.7b. The SA data still has spikes and dips but they are much less extreme. 
 # 4.1 A Season Plot
-
 retail_ts |>
   filter(series_id == "RSAFSNA") |>
   gg_season(sales) +
