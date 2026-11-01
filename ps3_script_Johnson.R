@@ -247,3 +247,81 @@ sa_compare <- retail_nsa_x13 |>
     by = "Month"
   ) |>
   mutate(pct_diff = 100 * (log(mine) - log(census)))
+
+sa_compare |>
+  ggplot(aes(x = Month, y = pct_diff)) +
+  geom_line() +
+  labs(
+    title = "My X-13 Seasonal Adjustment Minus the Census Bureau's",
+    x = NULL, y = "Difference (%)"
+  ) +
+  theme_minimal()
+# My adjustment closely matches the Census Bureau adjustment. However, the two adjustments differ the most a little after Janurary 2020, when the differences are above 1 %, and become more negative. Some of this ispossible due to COVID. 
+
+# 4.4. A Simple Model – Linear Trend + Seasonal Dummies
+can_gas_fit <- can_gas |>
+  model(TSLM(log_volume ~ trend() + season()))
+
+report(can_gas_fit)
+
+can_gas_fit |>
+  tidy() |>
+  select(term, estimate, std.error, statistic, p.value) |>
+  knitr::kable(digits = 3)
+# The estimated average monthly growth rate is .4%. The month with the largest seasonal effect is month 6 which is June with an aboslute T stat of 4.777
+
+can_gas_fit |>
+  augment() |>
+  ggplot(aes(x = Month)) +
+  geom_line(aes(y = log_volume, color = "Actual")) +
+  geom_line(aes(y = .fitted, color = "Fitted")) +
+  labs(title = "Linear Trend + Seasonal Dummies Fit: Canadian Gas Production",
+       y = "log(Volume)", color = NULL) +
+  theme_minimal()
+# The fitted line does not track the actual series very fell. The fitted line is linear, while the actual series is not linear. The fitted does well with the values from January 1990 to January 2000, but does not capture the trend of the data very well from anywhere else. 
+can_gas_fit |> gg_tsresiduals()
+can_gas_fit |>
+  augment() |>
+  features(.innov, ljung_box, lag = 24)
+# The residuals in the graph do not look like white noise; they have a clear trend first going up and then gradually going down. The LB test rejects the null at the 5 percent level with a p-value of zero
+
+# 5.1 An Expanding Window TSCV
+gas_cv_fc <- can_gas |>
+  select(Month, Volume) |>
+  stretch_tsibble(.init = 240, .step = 1) |>
+  model(snaive = SNAIVE(Volume),
+        tslm   = TSLM(log(Volume) ~ trend() + season())) |>
+  forecast(h = 1)
+gas_cv_fc |>
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE))
+# The date of the first forecast is January 1980, and the date of the last forecast is February 2005. 
+gas_cv_fc |>
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE)) |>
+  select(.model, MAE, RMSE) |>
+  knitr::kable(digits = 1)
+# The snaive model forecasts more accurately because the MAE and RMSE are both lower than the MAE and RMSE of the tslm model. The metrics do not agree
+
+# 5.2 Is the Difference Significant?
+errs <- gas_cv_fc |>
+  as_tibble() |>
+  left_join(as_tibble(can_gas) |> select(Month, actual = Volume),
+            by = "Month") |>
+  mutate(e = actual - .mean) |>
+  select(Month, .model, e) |>
+  pivot_wider(names_from = .model, values_from = e) |>
+  na.omit()
+
+forecast::dm.test(errs$snaive, errs$tslm, h = 1, power = 1)
+# DM stat: -31.278, p-value: 2.2e-16. We reject the null that the two model's forecasts are equally accurate.
+
+# 5.3 A Rolling Window
+gas_cv_fc <- can_gas |>
+  select(Month, Volume) |>
+  slide_tsibble(.size = 240, .step = 1) |>
+  model(snaive = SNAIVE(Volume),
+        tslm   = TSLM(log(Volume) ~ trend() + season())) |>
+  forecast(h = 1)
+gas_cv_fc |>
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE))
+# The tslm model accuracy changed more after the switch to a rolling window. This is because the rolling window only includes the most recent 240 months, which is the most recent trend. 
+
